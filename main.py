@@ -3,20 +3,23 @@ import sys
 import shutil
 import subprocess
 import requests
-import base64
 import concurrent.futures
 from pathlib import Path
 from datetime import datetime
+import tkinter as tk
+from tkinter import filedialog
+import random
 
 # ========================= CONFIGURATION =========================
-IMGBB_API_KEY = "ce3fef4a4f7e0380b85b4a415bd35d42"   # CHANGE THIS!
-SCREENSHOT_COUNT = 3
+IMGBB_API_KEY = "YOUR IMGBB API KEY"   # CHANGE THIS! (Revoke the old one!)
+SCREENSHOT_COUNT = 6
 LOSSLESS_SCREENSHOT = True         # True = PNG (fallback to JPG if >32MB) | False = Always JPG
 CREATE_TORRENT_FILE = True         # False = Skip .torrent creation
 SKIP_TXT = True                   # True = Don't save .txt file (but still copy to clipboard)
 TRACKER_ANNOUNCE = "https://tracker.torrentbd.net/announce"
 PRIVATE_TORRENT = True
 COPY_TO_CLIPBOARD = True
+USE_WP_PROXY = False               # True = Use https://i1.wp.com/ proxy | False = Direct link
 # ================================================================
 
 VIDEO_EXTS = {'.mkv', '.mp4', '.avi', '.mov', '.m4v', '.webm', '.flv', '.wmv', '.mpg', '.mpeg', '.ts', '.m2ts'}
@@ -80,11 +83,38 @@ def create_torrent(target: Path) -> bool:
     if not shutil.which("mkbrr"):
         error("mkbrr not found! → https://github.com/autobrr/mkbrr")
         return False
+    
+    log("Creating torrent file...", "Torrent")
     out = target.parent / f"{target.name}.torrent"
     cmd = ["mkbrr", "create", "-t", TRACKER_ANNOUNCE,
            f"--private={'true' if PRIVATE_TORRENT else 'false'}", "-o", str(out), str(target)]
-    r = subprocess.run(cmd, capture_output=True, text=True, startupinfo=hide_window())
-    if r.returncode == 0 and out.exists():
+    
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+        universal_newlines=True,
+        startupinfo=hide_window()
+    )
+    
+    # Properly read lines from stdout
+    while True:
+        line = process.stdout.readline()
+        if not line and process.poll() is not None:
+            break
+        if line:
+            line = line.strip()
+            if "Hashing pieces" in line or "%" in line or "Wrote" in line:
+                print(f"\r{c.CYAN}{line}{c.RESET}", end="", flush=True)
+    
+    # Final newline after progress
+    print()
+    
+    returncode = process.wait()
+    
+    if returncode == 0 and out.exists():
         success(f"Torrent created: {out.name}")
         return True
     else:
@@ -142,7 +172,6 @@ def take_screenshots(video: Path, count: int = SCREENSHOT_COUNT) -> list[Path]:
         if output_file.exists():
             size_mb = output_file.stat().st_size / (1024 * 1024)
 
-            # Auto fallback if PNG > 32MB
             if LOSSLESS_SCREENSHOT and ext == "png" and size_mb > 32:
                 output_file.unlink()
                 jpeg_file = Path(f"ss_{i:02d}.jpg")
@@ -162,20 +191,15 @@ def take_screenshots(video: Path, count: int = SCREENSHOT_COUNT) -> list[Path]:
 
     return files
 
-def upload_imgbb(img: Path):
+def upload_imgbb(img: Path) -> str | None:
     try:
-        with open(img, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode()
-        r = requests.post("https://api.imgbb.com/1/upload",  # ← Fixed: was garbage text!
-                          data={"key": IMGBB_API_KEY, "image": b64}, timeout=40)
+        r = requests.post("https://api.imgbb.com/1/upload",
+                          params={"key": IMGBB_API_KEY},
+                          files={"image": open(img, "rb")}, timeout=60)
         if r.status_code == 200:
-            data = r.json()["data"]
-            return {
-                "viewer": data["url_viewer"],
-                "img": data.get("medium", {}).get("url", data["url"])
-            }
-    except:
-        pass
+            return r.json()["data"]["url"]
+    except Exception:
+        print(f"   {c.RED}Upload failed for {img.name}{c.RESET}")
     return None
 
 def print_progress(done: int, total: int):
@@ -184,117 +208,136 @@ def print_progress(done: int, total: int):
     bar = "█" * filled + "▒" * (bar_length - filled)
     print(f"\r{c.CYAN}Uploading {total} screenshots... [{bar}] {done}/{total} uploaded{c.RESET}", end="", flush=True)
     if done == total:
-        print()  # New line
+        print()
 
-def file_browser() -> tuple[Path, bool]:
-    cur = Path(".").resolve()
+def select_target() -> tuple[Path, bool]:
+    root = tk.Tk()
+    root.withdraw()
+    root.update()
     while True:
         banner()
-        print(f"{c.BOLD}{c.CYAN}Current Folder → {c.WHITE}{cur}{c.RESET}\n")
-        
-        folders = sorted([p for p in cur.iterdir() if p.is_dir()], key=lambda x: x.name.lower())
-        files   = sorted([p for p in cur.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXTS], key=lambda x: x.name.lower())
-        
-        entries = []
-        if cur.parent != cur:
-            entries.append(("..", "Parent folder", True))
-        for f in folders:
-            entries.append((f.name + "/", "", True))
-        for f in files:
-            size_gb = f.stat().st_size / (1024**3)
-            entries.append((f.name, f"{size_gb:.2f} GB", False))
-
-        for i, (name, info, is_dir) in enumerate(entries, 1):
-            color = c.YELLOW if is_dir or name.endswith("/") else c.WHITE
-            print(f"  {c.DIM}{i:2d}.{c.RESET} {color}{name:<50} {c.GRAY}{info}{c.RESET}")
-
-        try:
-            choice = input(f"\n{c.BOLD}Select (1-{len(entries)}) or q to quit: {c.RESET}").strip()
-            if choice.lower() == 'q': sys.exit(0)
-            idx = int(choice) - 1
-            selected_path = (cur / entries[idx][0].rstrip("/")).resolve()
-            if selected_path.is_dir():
-                if entries[idx][0] == "..":
-                    cur = cur.parent
-                else:
-                    cur = selected_path
-            else:
-                return selected_path, False
-        except:
-            input(f"{c.RED}Invalid input — press Enter...{c.RESET}")
-
-        ans = input(f"\n{c.CYAN}Upload ENTIRE folder? (yes or Enter): {c.RESET}").strip().lower()
-        if ans in ['yes', 'y', '']:
-            video_files = [f for f in cur.iterdir() if f.suffix.lower() in VIDEO_EXTS]
-            if not video_files:
-                error("No video files found!"); input(); continue
-            return cur, True
+        print(f"{c.BOLD}{c.CYAN}Choose an option:{c.RESET}")
+        print(f"  {c.WHITE}1{c.RESET} - Select a single video file")
+        print(f"  {c.WHITE}2{c.RESET} - Select an entire folder (multi-episode/season)")
+        print(f"  {c.GRAY}(q to quit){c.RESET}\n")
+        choice = input(f"{c.BOLD}Enter 1 or 2: {c.RESET}").strip().lower()
+        if choice == 'q':
+            sys.exit(0)
+        if choice == '1':
+            file_path = filedialog.askopenfilename(
+                title="Select a Video File",
+                filetypes=[("Video Files", "*.mkv *.mp4 *.avi *.mov *.m4v *.webm *.flv *.wmv *.mpg *.mpeg *.ts *.m2ts")]
+            )
+            if file_path:
+                return Path(file_path), False
+        elif choice == '2':
+            folder_path = filedialog.askdirectory(title="Select Folder Containing Videos")
+            if folder_path:
+                return Path(folder_path), True
+        else:
+            input(f"{c.RED}Invalid choice — press Enter to try again...{c.RESET}")
 
 def main():
-    target_path, is_folder = file_browser()
-    if not target_path: return
+    target_path, is_folder = select_target()
+    if not target_path or not target_path.exists():
+        return
 
     clear(); banner()
     print(f"{c.BOLD}{c.PURPLE}Selected → {target_path.name}{c.RESET} {'(Folder Mode)' if is_folder else ''}\n")
 
-    if is_folder:
-        video_files = [f for f in target_path.iterdir() if f.suffix.lower() in VIDEO_EXTS]
-        video_for_ss = max(video_files, key=lambda x: x.stat().st_size)
-        success(f"Using for screenshots: {video_for_ss.name}")
-    else:
-        video_for_ss = target_path
-
+    # Create torrent first
     if not create_torrent(target_path):
         if CREATE_TORRENT_FILE:
-            input("\nPress Enter to exit..."); return
+            input("\nPress Enter to exit...")
+            return
+
+    # Then select random video for mediainfo & screenshots
+    if is_folder:
+        video_files = [f for f in target_path.iterdir() if f.suffix.lower() in VIDEO_EXTS]
+        if not video_files:
+            error("No video files found in the folder!")
+            input("\nPress Enter to exit...")
+            return
+        video_for_ss = random.choice(video_files)
+        success(f"Randomly selected for screenshots & mediainfo: {video_for_ss.name}")
+    else:
+        video_for_ss = target_path
 
     mediainfo_text = get_mediainfo(video_for_ss)
     screenshots = take_screenshots(video_for_ss, SCREENSHOT_COUNT)
 
-    # === UPLOAD WITH PROGRESS BAR ===
-    uploaded = []
+    if not screenshots:
+        error("No screenshots were taken!")
+        input("\nPress Enter to exit...")
+        return
+
+    # Upload screenshots
+    uploaded_direct_urls = []
     total = len(screenshots)
     print_progress(0, total)
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        future_to_idx = {executor.submit(upload_imgbb, img): i for i, img in enumerate(screenshots)}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+        futures = {executor.submit(upload_imgbb, img): img for img in screenshots}
         done_count = 0
-        for future in concurrent.futures.as_completed(future_to_idx):
+        for future in concurrent.futures.as_completed(futures):
             result = future.result()
             if result:
-                uploaded.append(result)
+                uploaded_direct_urls.append(result)
             done_count += 1
             print_progress(done_count, total)
+
+    if not uploaded_direct_urls:
+        error("All uploads failed!")
+        input("\nPress Enter to exit...")
+        return
 
     # Cleanup
     for f in Path(".").glob("ss_*.*"):
         try: f.unlink()
         except: pass
 
-    ss_bbcode = "\n".join(f"[url={u['viewer']}][img]{u['img']}[/img][/url]" for u in uploaded)
+    # Build screenshot BBCode
+    ss_lines = []
+    for direct_url in uploaded_direct_urls:
+        if USE_WP_PROXY:
+            proxy_url = "https://i1.wp.com/" + direct_url.split("://")[1]
+            ss_lines.append(f"[img]{proxy_url}[/img]")
+        else:
+            ss_lines.append(f"[img]{direct_url}[/img]")
 
-    description = f"""[center][url=https://imgbb.com/][img]https://i.ibb.co.com/35XrJ9P0/Syacm.gif[/img][/url][/center]
+    ss_bbcode = "\n".join(ss_lines)
+
+    # Updated header as requested
+    description = f"""[hr]
+[center][img]https://i.ibb.co.com/35XrJ9P0/Syacm.gif[/img]
+[b][size=4][color=#FFD700]DON'T FORGET TO[/color] [color=#E42217]ADD A REP POINT![/color][/size][/b][/center]
+[hr]
+
+
+
+
+
 
 [hr]
-[center][b][color=#00acc1][size=6][font=Comic Sans MS]Mediainfo[/font][/size][/color][/b][/center]
+[center][b][size=5][color=#00acc1]MediaInfo[/color][/size][/b][/center]
 [hr]
-
 [font=Times New Roman]
 [mediainfo]
 {mediainfo_text}
 [/mediainfo]
 [/font]
-
 [hr]
-[center][b][color=#00acc1][size=6][font=Comic Sans MS]Screenshots[/font][/size][/color][/b][/center]
+[center][b][size=5][color=#00acc1]Screenshots[/color][/size][/b]
+[size=2][color=#9e9e9e]Straight from the source - untouched frames.[/color][/size][/center]
 [hr]
-
 {ss_bbcode}
-
+[hr]
+[center][size=4][color=#b0bec5][font=Comic Sans MS]~Thanks for grabbing this release:sticker-pepe-face [/size][/center]
+[center][size=4]Seed if you can.[/size][/font][/color][/center]
 [hr]"""
 
     if not SKIP_TXT:
-        save_name = f"{target_path.name}_TBD_Description.txt" if is_folder else f"{target_path.stem}_TBD_Description.txt"
+        save_name = f"{target_path.name}_description.txt" if is_folder else f"{target_path.stem}_TBD_Description.txt"
         txt_file = target_path.parent / save_name
         txt_file.write_text(description, encoding="utf-8")
         success(f"Saved → {txt_file.name}")
@@ -302,7 +345,7 @@ def main():
         log("Skipping .txt save (SKIP_TXT = True)", "Skip")
 
     copy_to_clipboard(description)
-    print(f"\n{c.BOLD}{c.GREEN}ALL DONE! Paste on TorrentBD now!{c.RESET}")
+    print(f"\n{c.BOLD}{c.GREEN}ALL DONE! Paste the description on TorrentBD now!{c.RESET}")
     input(f"\nPress Enter to exit...")
 
 if __name__ == "__main__":
