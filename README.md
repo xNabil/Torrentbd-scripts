@@ -1,107 +1,109 @@
 # Torrent Auto Description Maker
 
-A powerful Python CLI tool designed to automate the creation of torrent descriptions for private trackers (specifically configured for **TorrentBD**). It handles everything from creating the `.torrent` file to generating Mediainfo, taking screenshots, uploading them to ImgBB, and formatting the final description in BBCode.
+A powerful Python automation tool designed for uploaders on private trackers (optimized for **TorrentBD**). This script streamlines the release process by automatically creating torrent files, generating media info, taking screenshots, uploading them to ImgBB, and formatting a stylish BBCode description.
 
 ## 🚀 Features
 
-* **Automated Torrent Creation:** Uses `mkbrr` to generate private torrent files automatically.
-* **Smart Screenshots:** * Automatically takes screenshots at evenly distributed timestamps (20% to 80% of video duration).
-    * **Lossless Mode:** Attempts to save as PNG. Automatically falls back to JPG if the file size exceeds 32MB.
-* **Auto-Upload:** Uploads screenshots directly to [ImgBB](https://imgbb.com/) via API.
-* **MediaInfo Extraction:** Scans video files and generates a clean MediaInfo report.
-* **BBCode Generation:** meaningful formatting (Center, Fonts, Colors) ready for tracker submission.
-* **Clipboard Integration:** Automatically copies the final output to your clipboard.
-* **Directory & File Support:** Works with single video files or entire Season packs/Folders.
+* **Automatic Torrent Creation:** Uses `mkbrr` to create private `.torrent` files with the correct announce URL.
+* **Smart Screenshots:**
+    * Automatically captures 6 screenshots spread evenly between 20% and 80% of the video duration.
+    * **Lossless Logic:** Attempts PNG first; falls back to JPG if the file size exceeds 32MB.
+* **MediaInfo Extraction:** Scans video files and generates clean MediaInfo text.
+* **Image Hosting:** Automatically uploads screenshots to **ImgBB** via API.
+* **Folder Support:**
+    * **Single File:** Processes a single movie/video.
+    * **Folder Mode:** Detects TV seasons/packs, creates a torrent for the whole folder, and selects a random video for the sample screenshots.
+* **Clipboard Ready:** Automatically copies the final BBCode description to your clipboard.
 
-## 🛠️ Prerequisites
+## 🛠 Prerequisites
 
-To run this tool, you need the following installed on your system:
+To run this tool, you need **Python 3.x** and the following external tools installed and added to your system PATH.
 
-1.  **Python 3.x**
-2.  **FFmpeg & FFprobe:** Required for taking screenshots.
-    * *Windows:* [Download Build](https://gyan.dev/ffmpeg/builds/) and add to System PATH.
-    * *Linux:* `sudo apt install ffmpeg`
-3.  **MediaInfo:**
-    * *Windows:* Install CLI or GUI version, or place `MediaInfo.exe` in the script folder.
-    * *Linux:* `sudo apt install mediainfo`
-4.  **mkbrr (Optional but Recommended):** Required for creating the `.torrent` file.
-    * [Download mkbrr](https://github.com/autobrr/mkbrr) and add to System PATH.
+### 1. System Tools
+* **FFmpeg:** Required for taking screenshots. [Download Here](https://ffmpeg.org/download.html)
+* **MediaInfo:** Required for scanning metadata. [Download Here](https://mediaarea.net/en/MediaInfo)
+* **mkbrr:** Required for creating torrent files. [Download Here](https://github.com/autobrr/mkbrr)
 
-## 📦 Installation
+### 2. Python Libraries
+Install the required Python dependency:
 
-1.  **Clone the repository (or download the script):**
-    ```bash
-    git clone [https://github.com/yourusername/torrent-description-maker.git](https://github.com/yourusername/torrent-description-maker.git)
-    cd torrent-description-maker
-    ```
+```bash
+pip install requests
+````
 
-2.  **Install Python Dependencies:**
-    ```bash
-    pip install requests
-    ```
+*(Note: `tkinter` is usually included with Python, but Linux users might need to install `python3-tk`)*.
+
+-----
 
 ## ⚙️ Configuration
 
-Open the script file (e.g., `main.py`) in a text editor and look for the **CONFIGURATION** section at the top.
+**Before running the script, you must configure your API key.**
 
-**You must set your ImgBB API Key:**
+1.  Open the script file in a text editor.
+2.  Locate the `CONFIGURATION` block at the top.
+3.  Replace `"YOUR IMGBB API KEY"` with your actual key.
 
-1.  Go to [api.imgbb.com](https://api.imgbb.com/).
-2.  Get your free API Key.
-3.  Replace the value in the script:
+> **Get your free API Key here:** [https://api.imgbb.com/](https://api.imgbb.com/)
 
 ```python
 # ========================= CONFIGURATION =========================
-IMGBB_API_KEY = "YOUR_API_KEY_HERE"   # <--- PASTE KEY HERE
-SCREENSHOT_COUNT = 3                  # Number of screenshots to take
-LOSSLESS_SCREENSHOT = True            # True = PNG, False = JPG
-CREATE_TORRENT_FILE = True            # Set to False if you don't use mkbrr
-SKIP_TXT = True                       # True = Copy to clipboard only, don't save .txt
+IMGBB_API_KEY = "abc123456789..."   # <--- PASTE KEY HERE
+SCREENSHOT_COUNT = 6                # Number of screenshots to take
+LOSSLESS_SCREENSHOT = True          # True = PNG, False = JPG
+CREATE_TORRENT_FILE = True          # Set to False if you only want the description
+TRACKER_ANNOUNCE = "[https://tracker.torrentbd.net/announce](https://tracker.torrentbd.net/announce)"
 # ================================================================
-````
+```
+
+-----
 
 ## 🖥️ Usage
 
-1.  Run the script:
+1.  Run the script via your terminal or command prompt:
+
     ```bash
     python main.py
     ```
-2.  **File Browser:** The CLI will show a list of files and folders in the current directory.
-      * Type the **number** of the file/folder you want to process.
-      * Type `..` to go up a directory.
-3.  **Folder Mode:** If you select a folder, it will ask if you want to upload the entire folder. Type `y` or press Enter.
-4.  **Process:**
-      * The script will generate the `.torrent` file.
-      * It will scan for `MediaInfo`.
-      * It will take screenshots and upload them.
-5.  **Finish:** \* The BBCode description is automatically copied to your clipboard.
-      * Paste it directly into the "Description" field on the upload page.
 
-## 📝 output Example
+2.  A menu will appear asking for your input mode:
 
-The tool generates BBCode formatted like this:
+      * **Option 1:** Select a single video file (e.g., `.mkv`, `.mp4`).
+      * **Option 2:** Select a folder (useful for Season Packs).
 
-```bbcode
-[center][img][https://i.ibb.co/banner.gif](https://i.ibb.co/banner.gif)[/img][/center]
-[hr]
-[center][b][color=#00acc1][size=6]Mediainfo[/size][/color][/b][/center]
-[hr]
-[mediainfo]
-...Video/Audio specs...
-[/mediainfo]
-[hr]
-[center][b][color=#00acc1][size=6]Screenshots[/size][/color][/b][/center]
-[hr]
-[url=ViewerLink][img]DirectLink[/img][/url]
-[url=ViewerLink][img]DirectLink[/img][/url]
-```
+3.  **The Process:**
 
-## ⚠️ Troubleshooting
+      * The script creates the `.torrent` file in the same directory as your media.
+      * It generates screenshots and MediaInfo.
+      * It uploads images to ImgBB.
+      * It generates the BBCode description.
 
-  * **"mkbrr not found":** Ensure `mkbrr` is in your Windows System Environment Variables (PATH), or set `CREATE_TORRENT_FILE = False` in the config.
-  * **"ffprobe not found":** Ensure FFmpeg is installed and added to PATH.
-  * **Upload Errors:** Check if your ImgBB API key is valid.
+4.  **Finish:**
 
-## 📄 License
+      * The BBCode is copied to your **clipboard**.
+      * A `.txt` file containing the description is saved alongside your media (optional).
+      * Paste the clipboard content directly into the TorrentBD upload page.
 
-Project created by [xNabil](https://github.com/xNabil).
+-----
+
+## 📂 Supported Formats
+
+The script supports the following video extensions:
+`.mkv`, `.mp4`, `.avi`, `.mov`, `.m4v`, `.webm`, `.flv`, `.wmv`, `.mpg`, `.mpeg`, `.ts`, `.m2ts`
+
+## 📝 License
+
+This project is open-source. Feel free to modify it to suit your needs.
+
+-----
+
+*Created by xNabil*
+
+
+***
+
+### Next Steps for You
+
+1.  **Dependencies:** Ensure you have `ffmpeg`, `mediainfo`, and `mkbrr` installed and added to your System Environment Variables (PATH), otherwise the script will throw errors.
+2.  **API Key:** Don't forget to get a fresh API key from ImgBB, as the placeholder in the code won't work.
+
+**Would you like me to create a `requirements.txt` file specifically for this project as well?**
