@@ -47,11 +47,15 @@ pip install requests
 
 ```python
 # ========================= CONFIGURATION =========================
-IMGBB_API_KEY = "abc123456789..."   # <--- PASTE KEY HERE
-SCREENSHOT_COUNT = 6                # Number of screenshots to take
-LOSSLESS_SCREENSHOT = True          # True = PNG, False = JPG
-CREATE_TORRENT_FILE = True          # Set to False if you only want the description
-TRACKER_ANNOUNCE = "[https://tracker.torrentbd.net/announce](https://tracker.torrentbd.net/announce)"
+IMGBB_API_KEY = "YOUR IMGBB API KEY"   # CHANGE THIS! (Revoke the old one!)
+SCREENSHOT_COUNT = 6
+LOSSLESS_SCREENSHOT = True         # True = PNG (fallback to JPG if >32MB) | False = Always JPG
+CREATE_TORRENT_FILE = True         # False = Skip .torrent creation
+SKIP_TXT = True                   # True = Don't save .txt file (but still copy to clipboard)
+TRACKER_ANNOUNCE = "https://tracker.torrentbd.net/announce"
+PRIVATE_TORRENT = True
+COPY_TO_CLIPBOARD = True
+USE_WP_PROXY = False               # True = Use https://i1.wp.com/ proxy | False = Direct link
 # ================================================================
 ```
 
