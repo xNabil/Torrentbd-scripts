@@ -52,26 +52,191 @@ You focus on releases, not rituals.
 
 ---
 
-## Requirements
 
-You’ll need these installed and available in `PATH`:
+Alright — here’s the **drop-in README section** you can add.
+Blunt, practical, zero hand-holding nonsense.
 
-* **Python 3.9+**
-* **ffmpeg** (includes `ffprobe`)
-* **MediaInfo**
-* **mkbrr** (for torrent creation)
+You can paste this **as-is** under a **“Setup & Requirements”** heading.
 
-  * [https://github.com/autobrr/mkbrr](https://github.com/autobrr/mkbrr)
+---
 
-Python dependencies:
+## Setup & Requirements
+
+This script relies on **external tools**.
+If they’re not installed **and added to PATH**, the script will fail. No magic.
+
+### 1. Python
+
+* **Python 3.9 or newer**
+* Verify:
+
+```bash
+python --version
+```
+
+Install dependency:
 
 ```bash
 pip install requests
 ```
 
-> On Windows, `MediaInfo.exe` can live next to the script if it’s not in PATH.
+---
+
+## Required External Tools (Must Be in PATH)
+
+### FFmpeg (ffmpeg + ffprobe)
+
+Used for:
+
+* Video duration detection
+* Frame-accurate screenshots
+
+**Download**
+
+* [https://ffmpeg.org/download.html](https://ffmpeg.org/download.html)
+
+**Windows setup**
+
+1. Download static build
+2. Extract (e.g. `C:\ffmpeg`)
+3. Add `C:\ffmpeg\bin` to **System PATH**
+4. Restart terminal
+
+**Verify**
+
+```bash
+ffmpeg -version
+ffprobe -version
+```
+
+If this fails, screenshots will fail. Period.
 
 ---
+
+### MediaInfo
+
+Used to extract **full MediaInfo text** for BBCode.
+
+**Download**
+
+* [https://mediaarea.net/en/MediaInfo](https://mediaarea.net/en/MediaInfo)
+
+**Windows**
+
+* Install normally **OR**
+* Place `MediaInfo.exe` in the same folder as the script
+
+**Linux**
+
+```bash
+sudo apt install mediainfo
+```
+
+**Verify**
+
+```bash
+mediainfo --version
+```
+
+---
+
+### mkbrr (Torrent Creator)
+
+Used to generate `.torrent` files.
+
+**Download**
+
+* [https://github.com/autobrr/mkbrr](https://github.com/autobrr/mkbrr)
+
+**Windows**
+
+1. Download release
+2. Place `mkbrr.exe` somewhere permanent
+3. Add that folder to **PATH**
+
+**Linux / macOS**
+
+```bash
+sudo mv mkbrr /usr/local/bin
+chmod +x /usr/local/bin/mkbrr
+```
+
+**Verify**
+
+```bash
+mkbrr --version
+```
+
+If `mkbrr` is missing:
+
+* Torrent creation will fail
+* Script will warn and stop (if enabled)
+
+---
+
+## API Keys Setup
+
+### freeimage.host (Default – No Account Needed)
+
+* Uses a **public API key**
+* No signup required
+* No account binding
+* No quota guarantees
+
+Already included in the script:
+
+```python
+FREEIMAGE_API_KEY = "6d207e02198a847aa98d0a2a901485a5"
+IMAGE_HOST = "freeimage"
+```
+
+⚠ This key is **shared and public**
+If freeimage.host changes or rate-limits it, uploads may break.
+
+That’s the trade-off.
+
+---
+
+### imgbb (Optional – More Stable)
+
+* Requires your own API key
+* Lower file size limit (32 MB)
+* More reliable long-term
+
+**Get API Key**
+
+1. Go to [https://imgbb.com](https://imgbb.com)
+2. Create account
+3. Visit: [https://api.imgbb.com](https://api.imgbb.com)
+4. Generate API key
+
+**Set in script**
+
+```python
+IMGBB_API_KEY = "YOUR_API_KEY_HERE"
+IMAGE_HOST = "imgbb"
+```
+
+If `IMGBB_API_KEY` is not set → uploads will fail silently for imgbb.
+
+---
+
+## PATH Sanity Check (Important)
+
+Before running the script, **all of these must work**:
+
+```bash
+ffmpeg -version
+ffprobe -version
+mediainfo --version
+mkbrr --version
+```
+
+If even one fails:
+
+* Fix PATH
+* Restart terminal
+* Try again
 
 ## Configuration (Read This)
 
