@@ -1,113 +1,158 @@
+Here’s a **straight-to-the-bone `README.md`** for this script.
+No fluff. No lies. Just what it is, what it does, and why it exists.
+
+---
+
 # Torrent Auto Description Maker
 
-A powerful Python automation tool designed for uploaders on private trackers (optimized for **TorrentBD**). This script streamlines the release process by automatically creating torrent files, generating media info, taking screenshots, uploading them to ImgBB, and formatting a stylish BBCode description.
+A ruthless little automation that turns a video or a full season folder into a **ready-to-post TorrentBD description** — screenshots uploaded, MediaInfo embedded, torrent created, BBCode polished, clipboard loaded.
 
-## 🚀 Features
+You select.
+It works.
+You post.
 
-* **Automatic Torrent Creation:** Uses `mkbrr` to create private `.torrent` files with the correct announce URL.
-* **Smart Screenshots:**
-    * Automatically captures 6 screenshots spread evenly between 20% and 80% of the video duration.
-    * **Lossless Logic:** Attempts PNG first; falls back to JPG if the file size exceeds 32MB.
-* **MediaInfo Extraction:** Scans video files and generates clean MediaInfo text.
-* **Image Hosting:** Automatically uploads screenshots to **ImgBB** via API.
-* **Folder Support:**
-    * **Single File:** Processes a single movie/video.
-    * **Folder Mode:** Detects TV seasons/packs, creates a torrent for the whole folder, and selects a random video for the sample screenshots.
-* **Clipboard Ready:** Automatically copies the final BBCode description to your clipboard.
+Built for people who are tired of doing the same ritual by hand.
 
-## 🛠 Prerequisites
+---
 
-To run this tool, you need **Python 3.x** and the following external tools installed and added to your system PATH.
+## What This Script Does
 
-### 1. System Tools
-* **FFmpeg:** Required for taking screenshots. [Download Here](https://ffmpeg.org/download.html)
-* **MediaInfo:** Required for scanning metadata. [Download Here](https://mediaarea.net/en/MediaInfo)
-* **mkbrr:** Required for creating torrent files. [Download Here](https://github.com/autobrr/mkbrr)
+This tool automates the boring, error-prone parts of torrent posting:
 
-### 2. Python Libraries
-Install the required Python dependency:
+* 🎞️ Select **one video** or an **entire folder**
+* 🧠 Auto-picks a video (folder mode) for:
+
+  * MediaInfo extraction
+  * Screenshot capture
+* 📸 Takes **lossless screenshots** (PNG → smart fallback to JPG if host limits are hit)
+* ☁️ Uploads screenshots to:
+
+  * **freeimage.host** (64 MB limit)
+  * **imgbb** (32 MB limit)
+* ⚡ Uploads screenshots **in parallel** (fast, no mercy)
+* 🧾 Builds a **clean BBCode description**:
+
+  * MediaInfo section
+  * Screenshot section
+  * Styled headers & footer
+* 📋 Copies the final description **directly to clipboard**
+* 🌊 Optionally creates a **private .torrent file** using `mkbrr`
+
+End result:
+**Paste → Seed → Done.**
+
+---
+
+## Why This Exists
+
+Because:
+
+* Manual screenshots are a waste of neurons
+* Re-uploading failed PNGs is pain
+* Formatting BBCode by hand is medieval
+* Consistency matters on private trackers
+
+This script removes friction.
+You focus on releases, not rituals.
+
+---
+
+## Requirements
+
+You’ll need these installed and available in `PATH`:
+
+* **Python 3.9+**
+* **ffmpeg** (includes `ffprobe`)
+* **MediaInfo**
+* **mkbrr** (for torrent creation)
+
+  * [https://github.com/autobrr/mkbrr](https://github.com/autobrr/mkbrr)
+
+Python dependencies:
 
 ```bash
 pip install requests
-````
+```
 
-*(Note: `tkinter` is usually included with Python, but Linux users might need to install `python3-tk`)*.
+> On Windows, `MediaInfo.exe` can live next to the script if it’s not in PATH.
 
------
+---
 
-## ⚙️ Configuration
+## Configuration (Read This)
 
-**Before running the script, you must configure your API key.**
-
-1.  Open the script file in a text editor.
-2.  Locate the `CONFIGURATION` block at the top.
-3.  Replace `"YOUR IMGBB API KEY"` with your actual key.
-
-> **Get your free API Key here:** [https://api.imgbb.com/](https://api.imgbb.com/)
+At the top of the script:
 
 ```python
-# ========================= CONFIGURATION =========================
-IMGBB_API_KEY = "YOUR IMGBB API KEY"   # CHANGE THIS! (Revoke the old one!)
+IMGBB_API_KEY = "YOUR IMGBB API KEY"
+FREEIMAGE_API_KEY = "your_freeimage_key"
+
+IMAGE_HOST = "freeimage"   # "imgbb" or "freeimage"
 SCREENSHOT_COUNT = 6
-LOSSLESS_SCREENSHOT = True         # True = PNG (fallback to JPG if >32MB) | False = Always JPG
-CREATE_TORRENT_FILE = True         # False = Skip .torrent creation
-SKIP_TXT = True                   # True = Don't save .txt file (but still copy to clipboard)
+LOSSLESS_SCREENSHOT = True
+CREATE_TORRENT_FILE = True
+SKIP_TXT = True
 TRACKER_ANNOUNCE = "https://tracker.torrentbd.net/announce"
 PRIVATE_TORRENT = True
 COPY_TO_CLIPBOARD = True
-USE_WP_PROXY = False               # True = Use https://i1.wp.com/ proxy | False = Direct link
-# ================================================================
+USE_WP_PROXY = False
 ```
 
------
+### Image Host Limits
 
-## 🖥️ Usage
+* **imgbb** → 32 MB max
+* **freeimage.host** → 64 MB max
 
-1.  Run the script via your terminal or command prompt:
+PNG too big?
+The script **automatically falls back to JPG**. No babysitting.
 
-    ```bash
-    python main.py
-    ```
+---
 
-2.  A menu will appear asking for your input mode:
+## How It Works (Flow)
 
-      * **Option 1:** Select a single video file (e.g., `.mkv`, `.mp4`).
-      * **Option 2:** Select a folder (useful for Season Packs).
+1. Launch script
+2. Choose:
 
-3.  **The Process:**
+   * Single video **or**
+   * Folder (season / batch)
+3. Torrent file created (`.torrent`)
+4. Screenshots taken between **20% → 80%** of runtime
+5. Screenshots uploaded concurrently
+6. BBCode description generated
+7. Description copied to clipboard
+8. Temporary files cleaned
+9. You post. The tracker smiles.
 
-      * The script creates the `.torrent` file in the same directory as your media.
-      * It generates screenshots and MediaInfo.
-      * It uploads images to ImgBB.
-      * It generates the BBCode description.
+---
 
-4.  **Finish:**
+## Output
 
-      * The BBCode is copied to your **clipboard**.
-      * A `.txt` file containing the description is saved alongside your media (optional).
-      * Paste the clipboard content directly into the TorrentBD upload page.
+* 📋 **Clipboard** → Full TorrentBD-ready BBCode
+* 📁 Optional `.torrent` file
+* 🧾 Optional `.txt` description file
 
------
+Zero clutter left behind.
 
-## 📂 Supported Formats
+---
 
-The script supports the following video extensions:
-`.mkv`, `.mp4`, `.avi`, `.mov`, `.m4v`, `.webm`, `.flv`, `.wmv`, `.mpg`, `.mpeg`, `.ts`, `.m2ts`
+## Platform Notes
 
-## 📝 License
+* **Windows**: fully supported (clipboard, hidden subprocesses)
+* **Linux**: requires `xclip` for clipboard
+* **macOS**: uses `pbcopy`
 
-This project is open-source. Feel free to modify it to suit your needs.
+---
 
------
+## Who This Is For
 
-*Created by xNabil*
+* TorrentBD uploaders
+* Private tracker regulars
+* Release groups
 
+If you upload more than once a month, this pays for itself instantly.
 
-***
+---
 
-### Next Steps for You
+## Author
 
-1.  **Dependencies:** Ensure you have `ffmpeg`, `mediainfo`, and `mkbrr` installed and added to your System Environment Variables (PATH), otherwise the script will throw errors.
-2.  **API Key:** Don't forget to get a fresh API key from ImgBB, as the placeholder in the code won't work.
-
-**Would you like me to create a `requirements.txt` file specifically for this project as well?**
+**xnabil**
+GitHub: [https://github.com/xNabil](https://github.com/xNabil)
