@@ -1,8 +1,3 @@
-Here’s a **straight-to-the-bone `README.md`** for this script.
-No fluff. No lies. Just what it is, what it does, and why it exists.
-
----
-
 # Torrent Auto Description Maker
 
 A ruthless little automation that turns a video or a full season folder into a **ready-to-post TorrentBD description** — screenshots uploaded, MediaInfo embedded, torrent created, BBCode polished, clipboard loaded.
