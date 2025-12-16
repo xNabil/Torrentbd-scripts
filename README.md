@@ -78,18 +78,25 @@ pip install requests
 At the top of the script:
 
 ```python
-IMGBB_API_KEY = "YOUR IMGBB API KEY"
-FREEIMAGE_API_KEY = "your_freeimage_key"
 
-IMAGE_HOST = "freeimage"   # "imgbb" or "freeimage"
+# ========================= CONFIGURATION =========================
+IMGBB_API_KEY = "YOUR IMGBB API KEY"   # CHANGE THIS! (Revoke the old one if exposed!)
+FREEIMAGE_API_KEY = "Your Freeimge key"
+
+IMAGE_HOST = "freeimage"               # "imgbb" or "freeimage"
+                                       # imgbb → max file size 32 MB
+                                       # freeimage → max file size 64 MB
+
 SCREENSHOT_COUNT = 6
-LOSSLESS_SCREENSHOT = True
-CREATE_TORRENT_FILE = True
-SKIP_TXT = True
+LOSSLESS_SCREENSHOT = True             # True = PNG (fallback to JPG if > max size of chosen host) | False = Always JPG
+CREATE_TORRENT_FILE = True             # False = Skip .torrent creation
+SKIP_TXT = True                        # True = Don't save .txt file (but still copy to clipboard)
 TRACKER_ANNOUNCE = "https://tracker.torrentbd.net/announce"
 PRIVATE_TORRENT = True
 COPY_TO_CLIPBOARD = True
-USE_WP_PROXY = False
+USE_WP_PROXY = False                   # True = Use https://i1.wp.com/ proxy | False = Direct link
+# ================================================================
+
 ```
 
 ### Image Host Limits
