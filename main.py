@@ -11,15 +11,21 @@ from tkinter import filedialog
 import random
 
 # ========================= CONFIGURATION =========================
-IMGBB_API_KEY = "YOUR IMGBB API KEY"   # CHANGE THIS! (Revoke the old one!)
+IMGBB_API_KEY = "YOUR IMGBB API KEY"   # CHANGE THIS! (Revoke the old one if exposed!)
+FREEIMAGE_API_KEY = "6d207e02198a847aa98d0a2a901485a5"
+
+IMAGE_HOST = "freeimage"               # "imgbb" or "freeimage"
+                                       # imgbb → max file size 32 MB
+                                       # freeimage → max file size 64 MB
+
 SCREENSHOT_COUNT = 6
-LOSSLESS_SCREENSHOT = True         # True = PNG (fallback to JPG if >32MB) | False = Always JPG
-CREATE_TORRENT_FILE = True         # False = Skip .torrent creation
-SKIP_TXT = True                   # True = Don't save .txt file (but still copy to clipboard)
+LOSSLESS_SCREENSHOT = True             # True = PNG (fallback to JPG if > max size of chosen host) | False = Always JPG
+CREATE_TORRENT_FILE = True             # False = Skip .torrent creation
+SKIP_TXT = True                        # True = Don't save .txt file (but still copy to clipboard)
 TRACKER_ANNOUNCE = "https://tracker.torrentbd.net/announce"
 PRIVATE_TORRENT = True
 COPY_TO_CLIPBOARD = True
-USE_WP_PROXY = False               # True = Use https://i1.wp.com/ proxy | False = Direct link
+USE_WP_PROXY = False                   # True = Use https://i1.wp.com/ proxy | False = Direct link
 # ================================================================
 
 VIDEO_EXTS = {'.mkv', '.mp4', '.avi', '.mov', '.m4v', '.webm', '.flv', '.wmv', '.mpg', '.mpeg', '.ts', '.m2ts'}
@@ -99,7 +105,6 @@ def create_torrent(target: Path) -> bool:
         startupinfo=hide_window()
     )
     
-    # Properly read lines from stdout
     while True:
         line = process.stdout.readline()
         if not line and process.poll() is not None:
@@ -109,7 +114,6 @@ def create_torrent(target: Path) -> bool:
             if "Hashing pieces" in line or "%" in line or "Wrote" in line:
                 print(f"\r{c.CYAN}{line}{c.RESET}", end="", flush=True)
     
-    # Final newline after progress
     print()
     
     returncode = process.wait()
@@ -156,6 +160,9 @@ def take_screenshots(video: Path, count: int = SCREENSHOT_COUNT) -> list[Path]:
     total_range = end_percent - start_percent
     files = []
 
+    # Determine max size based on selected host
+    max_size_mb = 32 if IMAGE_HOST.lower() == "imgbb" else 64
+
     for i in range(1, count + 1):
         progress = i / (count + 1)
         percent = start_percent + (total_range * progress)
@@ -172,7 +179,8 @@ def take_screenshots(video: Path, count: int = SCREENSHOT_COUNT) -> list[Path]:
         if output_file.exists():
             size_mb = output_file.stat().st_size / (1024 * 1024)
 
-            if LOSSLESS_SCREENSHOT and ext == "png" and size_mb > 32:
+            # Fallback to JPG if PNG exceeds host's max file size
+            if LOSSLESS_SCREENSHOT and ext == "png" and size_mb > max_size_mb:
                 output_file.unlink()
                 jpeg_file = Path(f"ss_{i:02d}.jpg")
                 cmd_jpg = ["ffmpeg", "-ss", f"{timestamp:.3f}", "-i", str(video),
@@ -180,7 +188,7 @@ def take_screenshots(video: Path, count: int = SCREENSHOT_COUNT) -> list[Path]:
                 subprocess.run(cmd_jpg, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, startupinfo=hide_window())
                 if jpeg_file.exists():
                     files.append(jpeg_file)
-                    print(f"   {c.YELLOW}Success {i}/{count} → JPEG (PNG too big: {size_mb:.1f}MB){c.RESET}")
+                    print(f"   {c.YELLOW}Success {i}/{count} → JPEG (PNG too big: {size_mb:.1f}MB > {max_size_mb}MB limit){c.RESET}")
                 continue
 
             files.append(output_file)
@@ -191,15 +199,31 @@ def take_screenshots(video: Path, count: int = SCREENSHOT_COUNT) -> list[Path]:
 
     return files
 
-def upload_imgbb(img: Path) -> str | None:
+def upload_image(img: Path) -> str | None:
     try:
-        r = requests.post("https://api.imgbb.com/1/upload",
-                          params={"key": IMGBB_API_KEY},
-                          files={"image": open(img, "rb")}, timeout=60)
-        if r.status_code == 200:
-            return r.json()["data"]["url"]
-    except Exception:
-        print(f"   {c.RED}Upload failed for {img.name}{c.RESET}")
+        if IMAGE_HOST.lower() == "imgbb":
+            if IMGBB_API_KEY == "YOUR IMGBB API KEY":
+                print(f"   {c.RED}imgbb API key not set!{c.RESET}")
+                return None
+            r = requests.post("https://api.imgbb.com/1/upload",
+                              params={"key": IMGBB_API_KEY},
+                              files={"image": open(img, "rb")}, timeout=60)
+            if r.status_code == 200:
+                return r.json()["data"]["url"]
+
+        elif IMAGE_HOST.lower() == "freeimage":
+            r = requests.post("https://freeimage.host/api/1/upload",
+                              params={"key": FREEIMAGE_API_KEY},
+                              files={"source": open(img, "rb")},  # freeimage.host uses "source"
+                              data={"format": "json"}, timeout=60)
+            if r.status_code == 200:
+                data = r.json()
+                if data.get("status_code") == 200:
+                    return data["image"]["url"]
+
+        print(f"   {c.RED}Upload failed for {img.name} ({IMAGE_HOST}){c.RESET}")
+    except Exception as e:
+        print(f"   {c.RED}Upload exception for {img.name}: {str(e)}{c.RESET}")
     return None
 
 def print_progress(done: int, total: int):
@@ -245,13 +269,11 @@ def main():
     clear(); banner()
     print(f"{c.BOLD}{c.PURPLE}Selected → {target_path.name}{c.RESET} {'(Folder Mode)' if is_folder else ''}\n")
 
-    # Create torrent first
     if not create_torrent(target_path):
         if CREATE_TORRENT_FILE:
             input("\nPress Enter to exit...")
             return
 
-    # Then select random video for mediainfo & screenshots
     if is_folder:
         video_files = [f for f in target_path.iterdir() if f.suffix.lower() in VIDEO_EXTS]
         if not video_files:
@@ -271,13 +293,12 @@ def main():
         input("\nPress Enter to exit...")
         return
 
-    # Upload screenshots
     uploaded_direct_urls = []
     total = len(screenshots)
     print_progress(0, total)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
-        futures = {executor.submit(upload_imgbb, img): img for img in screenshots}
+        futures = {executor.submit(upload_image, img): img for img in screenshots}
         done_count = 0
         for future in concurrent.futures.as_completed(futures):
             result = future.result()
@@ -291,12 +312,10 @@ def main():
         input("\nPress Enter to exit...")
         return
 
-    # Cleanup
     for f in Path(".").glob("ss_*.*"):
         try: f.unlink()
         except: pass
 
-    # Build screenshot BBCode
     ss_lines = []
     for direct_url in uploaded_direct_urls:
         if USE_WP_PROXY:
@@ -307,9 +326,8 @@ def main():
 
     ss_bbcode = "\n".join(ss_lines)
 
-    # Updated header as requested
     description = f"""[hr]
-[center][img]https://i.ibb.co.com/35XrJ9P0/Syacm.gif[/img]
+[center][img]https://i.ibb.co/35XrJ9P0/Syacm.gif[/img]
 [b][size=4][color=#FFD700]DON'T FORGET TO[/color] [color=#E42217]ADD A REP POINT![/color][/size][/b][/center]
 [hr]
 
