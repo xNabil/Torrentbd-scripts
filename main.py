@@ -326,16 +326,7 @@ def main():
 
     ss_bbcode = "\n".join(ss_lines)
 
-    description = f"""[hr]
-[center][img]https://i.ibb.co/35XrJ9P0/Syacm.gif[/img]
-[b][size=4][color=#FFD700]DON'T FORGET TO[/color] [color=#E42217]ADD A REP POINT![/color][/size][/b][/center]
-[hr]
-
-
-
-
-
-
+    description = f"""
 [hr]
 [center][b][size=5][color=#00acc1]MediaInfo[/color][/size][/b][/center]
 [hr]
@@ -350,9 +341,7 @@ def main():
 [hr]
 {ss_bbcode}
 [hr]
-[center][size=4][color=#b0bec5][font=Comic Sans MS]~Thanks for grabbing this release:sticker-pepe-face [/size][/center]
-[center][size=4]Seed if you can.[/size][/font][/color][/center]
-[hr]"""
+"""
 
     if not SKIP_TXT:
         save_name = f"{target_path.name}_description.txt" if is_folder else f"{target_path.stem}_TBD_Description.txt"
