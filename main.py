@@ -21,11 +21,12 @@ IMAGE_HOST = "freeimage"               # "imgbb" or "freeimage"
 SCREENSHOT_COUNT = 6
 LOSSLESS_SCREENSHOT = True             # True = PNG (fallback to JPG if > max size of chosen host) | False = Always JPG
 CREATE_TORRENT_FILE = True             # False = Skip .torrent creation
-SKIP_TXT = True                        # True = Don't save .txt file (but still copy to clipboard)
+SKIP_TXT = False                        # True = Don't save .txt file (but still copy to clipboard)
 TRACKER_ANNOUNCE = "https://tracker.torrentbd.net/announce"
 PRIVATE_TORRENT = True
 COPY_TO_CLIPBOARD = True
 USE_WP_PROXY = False                   # True = Use https://i1.wp.com/ proxy | False = Direct link
+USE_GUI_FILE_PICKER = False            # If False, use terminal to navigate and pick folders/files. Ideal for Linux.
 # ================================================================
 
 VIDEO_EXTS = {'.mkv', '.mp4', '.avi', '.mov', '.m4v', '.webm', '.flv', '.wmv', '.mpg', '.mpeg', '.ts', '.m2ts'}
@@ -234,7 +235,7 @@ def print_progress(done: int, total: int):
     if done == total:
         print()
 
-def select_target() -> tuple[Path, bool]:
+def gui_select_target() -> tuple[Path, bool]:
     root = tk.Tk()
     root.withdraw()
     root.update()
@@ -261,6 +262,60 @@ def select_target() -> tuple[Path, bool]:
         else:
             input(f"{c.RED}Invalid choice — press Enter to try again...{c.RESET}")
 
+def cli_select_target() -> tuple[Path, bool]:
+    current = Path.cwd().resolve()
+    while True:
+        banner()
+        print(f"{c.BOLD}{c.CYAN}Current directory: {current}{c.RESET}")
+        items = sorted([p for p in current.iterdir() if p.is_dir() or p.suffix.lower() in VIDEO_EXTS])
+        if not items:
+            print(f"{c.YELLOW}No folders or video files in this directory.{c.RESET}")
+            choice = input(f"{c.BOLD}Enter 0 to go back or q to quit: {c.RESET}").strip().lower()
+            if choice == '0' and current != Path.cwd().resolve():
+                current = current.parent
+                continue
+            elif choice == 'q':
+                sys.exit(0)
+            else:
+                continue
+        for i, item in enumerate(items, 1):
+            typ = f"{c.PURPLE}Dir{c.RESET}" if item.is_dir() else f"{c.CYAN}File{c.RESET}"
+            print(f"  {c.WHITE}{i}{c.RESET}. {item.name} ({typ})")
+        print(f"  {c.WHITE}0{c.RESET}. Go back" if current != Path.cwd().resolve() else f"  {c.WHITE}0{c.RESET}. Quit")
+        choice = input(f"{c.BOLD}Enter number (or q to quit): {c.RESET}").strip().lower()
+        if choice == 'q' or choice == '0':
+            if choice == '0' and current == Path.cwd().resolve():
+                sys.exit(0)
+            elif choice == '0':
+                current = current.parent
+                continue
+            else:
+                sys.exit(0)
+        try:
+            num = int(choice)
+            if 1 <= num <= len(items):
+                selected = items[num - 1]
+                if selected.is_dir():
+                    sub_choice = input(f"{c.BOLD}Navigate into '{selected.name}' (n) or select as target folder (s)? {c.RESET}").strip().lower()
+                    if sub_choice == 'n':
+                        current = selected
+                    elif sub_choice == 's':
+                        return selected, True
+                    else:
+                        print(f"{c.RED}Invalid choice.{c.RESET}")
+                else:
+                    return selected, False
+            else:
+                print(f"{c.RED}Invalid number.{c.RESET}")
+        except ValueError:
+            print(f"{c.RED}Invalid input.{c.RESET}")
+
+def select_target() -> tuple[Path, bool]:
+    if USE_GUI_FILE_PICKER:
+        return gui_select_target()
+    else:
+        return cli_select_target()
+
 def main():
     target_path, is_folder = select_target()
     if not target_path or not target_path.exists():
@@ -275,9 +330,9 @@ def main():
             return
 
     if is_folder:
-        video_files = [f for f in target_path.iterdir() if f.suffix.lower() in VIDEO_EXTS]
+        video_files = [f for f in target_path.rglob('*') if f.is_file() and f.suffix.lower() in VIDEO_EXTS]
         if not video_files:
-            error("No video files found in the folder!")
+            error("No video files found in the folder or subfolders!")
             input("\nPress Enter to exit...")
             return
         video_for_ss = random.choice(video_files)
@@ -326,8 +381,7 @@ def main():
 
     ss_bbcode = "\n".join(ss_lines)
 
-    description = f"""
-[hr]
+    description = f"""[hr]
 [center][b][size=5][color=#00acc1]MediaInfo[/color][/size][/b][/center]
 [hr]
 [font=Times New Roman]
@@ -339,9 +393,10 @@ def main():
 [center][b][size=5][color=#00acc1]Screenshots[/color][/size][/b]
 [size=2][color=#9e9e9e]Straight from the source - untouched frames.[/color][/size][/center]
 [hr]
+[center]
 {ss_bbcode}
-[hr]
-"""
+[/center]
+[hr]"""
 
     if not SKIP_TXT:
         save_name = f"{target_path.name}_description.txt" if is_folder else f"{target_path.stem}_TBD_Description.txt"
