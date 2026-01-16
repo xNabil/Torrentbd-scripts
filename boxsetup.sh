@@ -47,7 +47,7 @@ echo -e "${NC}"
 # 1. Gather Inputs First
 echo -e "${YELLOW}:: Configuration ::${NC}"
 read -p "Enter FileBrowser Username: " FB_USER
-read -s -p "Enter FileBrowser Password: " FB_PASS
+read -s -p "Enter FileBrowser Password (minimum length is 12) : " FB_PASS
 echo ""
 
 if [[ -z "$FB_USER" || -z "$FB_PASS" ]]; then
