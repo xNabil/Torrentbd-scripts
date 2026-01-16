@@ -18,7 +18,7 @@ LOG_FILE="/root/media-install.log"
 # Clear log file
 > "$LOG_FILE"
 
-# Helper function to print status
+# Helper functions
 function print_status() {
     echo -e "${BLUE}[INFO]${NC} $1"
 }
@@ -44,22 +44,42 @@ echo "      MEDIA TOOLS INSTALLATION SCRIPT"
 echo "====================================================="
 echo -e "${NC}"
 
-# 1. Gather Inputs First
+# =========================================================
+#  1. CONFIGURATION & VALIDATION
+# =========================================================
 echo -e "${YELLOW}:: Configuration ::${NC}"
-read -p "Enter FileBrowser Username: " FB_USER
-read -s -p "Enter FileBrowser Password (minimum length is 12) : " FB_PASS
-echo ""
 
-if [[ -z "$FB_USER" || -z "$FB_PASS" ]]; then
-    print_error "Username/Password cannot be empty."
-    exit 1
-fi
+# Username Input
+while true; do
+    read -p "Enter FileBrowser Username: " FB_USER
+    if [[ -n "$FB_USER" ]]; then
+        break
+    else
+        echo -e "${RED}Username cannot be empty.${NC}"
+    fi
+done
+
+# Password Input (Min 12 Chars)
+while true; do
+    read -s -p "Enter FileBrowser Password (min 12 chars): " FB_PASS
+    echo ""
+    
+    if [[ ${#FB_PASS} -ge 12 ]]; then
+        break
+    else
+        echo -e "${RED}Error: Password is too short. It must be at least 12 characters.${NC}"
+    fi
+done
 
 echo ""
 print_status "Installation started. Logs: $LOG_FILE"
 echo "-----------------------------------------------------"
 
-# 2. System Update
+# =========================================================
+#  2. INSTALLATION STEPS
+# =========================================================
+
+# System Update
 print_status "Updating system repositories..."
 {
     apt-get update -y
@@ -67,7 +87,7 @@ print_status "Updating system repositories..."
 } >> "$LOG_FILE" 2>&1
 print_success "System updated."
 
-# 3. MKVToolNix
+# MKVToolNix
 print_status "Installing MKVToolNix (v96.0)..."
 MKV_URL="https://mkvtoolnix.download/debian/pool/bookworm/main/m/mkvtoolnix/mkvtoolnix_96.0-0~debian12bunkus01_amd64.deb"
 {
@@ -77,14 +97,14 @@ MKV_URL="https://mkvtoolnix.download/debian/pool/bookworm/main/m/mkvtoolnix/mkvt
 } >> "$LOG_FILE" 2>&1
 print_success "MKVToolNix installed."
 
-# 4. MediaInfo & FFmpeg
+# MediaInfo & FFmpeg
 print_status "Installing MediaInfo & FFmpeg..."
 {
     apt-get install -y mediainfo libmediainfo-dev ffmpeg
 } >> "$LOG_FILE" 2>&1
 print_success "Media libraries installed."
 
-# 5. mkbrr
+# mkbrr
 print_status "Fetching and installing mkbrr..."
 {
     MKBRR_URL=$(curl -s https://api.github.com/repos/autobrr/mkbrr/releases/latest | grep download | grep linux_amd64.deb | cut -d\" -f4)
@@ -98,14 +118,12 @@ print_status "Fetching and installing mkbrr..."
 } >> "$LOG_FILE" 2>&1
 print_success "mkbrr installed."
 
-# 6. Fastfetch
+# Fastfetch
 print_status "Installing Fastfetch..."
 {
-    # Add Repo Key (Silently)
     echo "deb [signed-by=/etc/apt/keyrings/fastfetch.gpg] http://repo.fastfetch.dev/debian/ generic main" | tee /etc/apt/sources.list.d/fastfetch.list
     mkdir -p /etc/apt/keyrings
     
-    # Install specific DEB
     FF_URL="https://github.com/fastfetch-cli/fastfetch/releases/download/2.55.1/fastfetch-linux-amd64-polyfilled.deb"
     wget -q -O fastfetch.deb "$FF_URL"
     apt-get install -y ./fastfetch.deb
@@ -113,14 +131,13 @@ print_status "Installing Fastfetch..."
 } >> "$LOG_FILE" 2>&1
 print_success "Fastfetch installed."
 
-# 7. FileBrowser
+# FileBrowser
 print_status "Installing FileBrowser..."
 {
     curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash
 } >> "$LOG_FILE" 2>&1
 
 print_status "Configuring FileBrowser Service..."
-# Create Service File
 cat <<EOF > /etc/systemd/system/filebrowser.service
 [Unit]
 Description=File Browser
@@ -141,11 +158,9 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-# Initialize DB and User
 {
     systemctl daemon-reload
     systemctl enable filebrowser
-    # Start briefly to gen DB
     systemctl start filebrowser
     sleep 3
     systemctl stop filebrowser
@@ -153,12 +168,11 @@ EOF
     # Add User
     /usr/local/bin/filebrowser users add "$FB_USER" "$FB_PASS" --perm.admin --database /root/filebrowser.db
     
-    # Restart
     systemctl start filebrowser
 } >> "$LOG_FILE" 2>&1
 print_success "FileBrowser configured and running."
 
-# 8. Torrent Creator
+# Torrent Creator
 print_status "Downloading Torrent Creator script..."
 wget -q -O /root/main.py https://raw.githubusercontent.com/xNabil/torrent-creator/refs/heads/main/main.py
 print_success "Script saved to /root/main.py"
@@ -179,7 +193,7 @@ echo -e "   ${YELLOW}Service${NC}        : FileBrowser"
 echo -e "   ${YELLOW}Status${NC}         : ${GREEN}Active (Running)${NC}"
 echo -e "   ${YELLOW}URL${NC}            : http://$PUBLIC_IP:808"
 echo -e "   ${YELLOW}Username${NC}       : $FB_USER"
-echo -e "   ${YELLOW}Password${NC}       : (hidden)"
+echo -e "   ${YELLOW}Password${NC}       : $FB_PASS"
 echo -e "   ${YELLOW}Database${NC}       : /root/filebrowser.db"
 echo ""
 echo -e "   ${YELLOW}Extra Tools${NC}    : mkbrr, mkvtoolnix, fastfetch, ffmpeg"
