@@ -1,109 +1,126 @@
 #!/bin/bash
 
 # =========================================================
-#  Automated Media Server Installer
-#  Inspired by Jerry048/Dedicated-Seedbox
+#  MINIMALIST MEDIA SERVER INSTALLER
+#  Logs are saved to: /root/media-install.log
 # =========================================================
 
-# Colors for formatting
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+CYAN='\033[0;36m'
+NC='\033[0m'
 
-# Check if running as root
+LOG_FILE="/root/media-install.log"
+
+# Clear log file
+> "$LOG_FILE"
+
+# Helper function to print status
+function print_status() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+function print_success() {
+    echo -e "${GREEN}[OK]${NC} $1"
+}
+
+function print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Root Check
 if [[ $EUID -ne 0 ]]; then
-   echo -e "${RED}This script must be run as root.${NC}" 
+   print_error "This script must be run as root."
    exit 1
 fi
 
-# =========================================================
-#  INPUTS
-# =========================================================
 clear
-echo -e "${BLUE}"
+echo -e "${CYAN}"
 echo "====================================================="
 echo "      MEDIA TOOLS INSTALLATION SCRIPT"
 echo "====================================================="
 echo -e "${NC}"
 
-# Prompt for FileBrowser credentials
-echo -e "${YELLOW}Please enter credentials for FileBrowser:${NC}"
-read -p "Username: " FB_USER
-read -s -p "Password: " FB_PASS
+# 1. Gather Inputs First
+echo -e "${YELLOW}:: Configuration ::${NC}"
+read -p "Enter FileBrowser Username: " FB_USER
+read -s -p "Enter FileBrowser Password: " FB_PASS
 echo ""
 
 if [[ -z "$FB_USER" || -z "$FB_PASS" ]]; then
-    echo -e "${RED}Error: Username and Password cannot be empty.${NC}"
+    print_error "Username/Password cannot be empty."
     exit 1
 fi
 
-echo -e "\n${GREEN}Starting Installation...${NC}\n"
+echo ""
+print_status "Installation started. Logs: $LOG_FILE"
+echo "-----------------------------------------------------"
 
-# =========================================================
-#  1. UPDATE SYSTEM
-# =========================================================
-echo -e "${BLUE}[1/8] Updating System Repositories...${NC}"
-apt update -y
-apt install -y curl wget gnupg2 sudo
+# 2. System Update
+print_status "Updating system repositories..."
+{
+    apt-get update -y
+    apt-get install -y curl wget gnupg2 sudo lsb-release
+} >> "$LOG_FILE" 2>&1
+print_success "System updated."
 
-# =========================================================
-#  2. MKVTOOLNIX (Specific Version)
-# =========================================================
-echo -e "${BLUE}[2/8] Installing MKVToolNix...${NC}"
+# 3. MKVToolNix
+print_status "Installing MKVToolNix (v96.0)..."
 MKV_URL="https://mkvtoolnix.download/debian/pool/bookworm/main/m/mkvtoolnix/mkvtoolnix_96.0-0~debian12bunkus01_amd64.deb"
-MKV_DEB="mkvtoolnix.deb"
+{
+    wget -q -O mkvtoolnix.deb "$MKV_URL"
+    apt-get install -y ./mkvtoolnix.deb
+    rm mkvtoolnix.deb
+} >> "$LOG_FILE" 2>&1
+print_success "MKVToolNix installed."
 
-wget -q --show-progress -O "$MKV_DEB" "$MKV_URL"
-apt install -y "./$MKV_DEB"
-rm "$MKV_DEB"
+# 4. MediaInfo & FFmpeg
+print_status "Installing MediaInfo & FFmpeg..."
+{
+    apt-get install -y mediainfo libmediainfo-dev ffmpeg
+} >> "$LOG_FILE" 2>&1
+print_success "Media libraries installed."
 
-# =========================================================
-#  3. MEDIAINFO & FFMPEG
-# =========================================================
-echo -e "${BLUE}[3/8] Installing MediaInfo and FFmpeg...${NC}"
-apt install -y mediainfo libmediainfo-dev ffmpeg
+# 5. mkbrr
+print_status "Fetching and installing mkbrr..."
+{
+    MKBRR_URL=$(curl -s https://api.github.com/repos/autobrr/mkbrr/releases/latest | grep download | grep linux_amd64.deb | cut -d\" -f4)
+    if [[ -n "$MKBRR_URL" ]]; then
+        wget -q -O mkbrr.deb "$MKBRR_URL"
+        apt-get install -y ./mkbrr.deb
+        rm mkbrr.deb
+    else
+        echo "Failed to find mkbrr URL" >> "$LOG_FILE"
+    fi
+} >> "$LOG_FILE" 2>&1
+print_success "mkbrr installed."
 
-# =========================================================
-#  4. MKBRR (Dynamic Fetch)
-# =========================================================
-echo -e "${BLUE}[4/8] Installing mkbrr (Latest)...${NC}"
-MKBRR_URL=$(curl -s https://api.github.com/repos/autobrr/mkbrr/releases/latest | grep download | grep linux_amd64.deb | cut -d\" -f4)
-MKBRR_DEB="mkbrr_latest.deb"
+# 6. Fastfetch
+print_status "Installing Fastfetch..."
+{
+    # Add Repo Key (Silently)
+    echo "deb [signed-by=/etc/apt/keyrings/fastfetch.gpg] http://repo.fastfetch.dev/debian/ generic main" | tee /etc/apt/sources.list.d/fastfetch.list
+    mkdir -p /etc/apt/keyrings
+    
+    # Install specific DEB
+    FF_URL="https://github.com/fastfetch-cli/fastfetch/releases/download/2.55.1/fastfetch-linux-amd64-polyfilled.deb"
+    wget -q -O fastfetch.deb "$FF_URL"
+    apt-get install -y ./fastfetch.deb
+    rm fastfetch.deb
+} >> "$LOG_FILE" 2>&1
+print_success "Fastfetch installed."
 
-if [[ -n "$MKBRR_URL" ]]; then
-    wget -q --show-progress -O "$MKBRR_DEB" "$MKBRR_URL"
-    apt install -y "./$MKBRR_DEB"
-    rm "$MKBRR_DEB"
-else
-    echo -e "${RED}Failed to fetch mkbrr download URL.${NC}"
-fi
+# 7. FileBrowser
+print_status "Installing FileBrowser..."
+{
+    curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash
+} >> "$LOG_FILE" 2>&1
 
-# =========================================================
-#  5. FASTFETCH
-# =========================================================
-echo -e "${BLUE}[5/8] Installing Fastfetch...${NC}"
-# Adding the repo key/list as requested
-echo "deb [signed-by=/etc/apt/keyrings/fastfetch.gpg] http://repo.fastfetch.dev/debian/ generic main" | tee /etc/apt/sources.list.d/fastfetch.list > /dev/null
-mkdir -p /etc/apt/keyrings
-
-# Installing the specific requested DEB
-FF_URL="https://github.com/fastfetch-cli/fastfetch/releases/download/2.55.1/fastfetch-linux-amd64-polyfilled.deb"
-FF_DEB="fastfetch.deb"
-
-wget -q --show-progress -O "$FF_DEB" "$FF_URL"
-apt install -y "./$FF_DEB"
-rm "$FF_DEB"
-
-# =========================================================
-#  6. FILEBROWSER INSTALLATION
-# =========================================================
-echo -e "${BLUE}[6/8] Installing FileBrowser...${NC}"
-curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash
-
-# Create Systemd Service
-echo -e "${YELLOW}Creating systemd service file...${NC}"
+print_status "Configuring FileBrowser Service..."
+# Create Service File
 cat <<EOF > /etc/systemd/system/filebrowser.service
 [Unit]
 Description=File Browser
@@ -124,37 +141,50 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-# =========================================================
-#  7. CONFIGURE FILEBROWSER USER
-# =========================================================
-echo -e "${BLUE}[7/8] Configuring FileBrowser User...${NC}"
-# Reload and start temporarily to ensure DB is created, then stop
-systemctl daemon-reload
-systemctl enable filebrowser
-systemctl start filebrowser
-sleep 2
-systemctl stop filebrowser
+# Initialize DB and User
+{
+    systemctl daemon-reload
+    systemctl enable filebrowser
+    # Start briefly to gen DB
+    systemctl start filebrowser
+    sleep 3
+    systemctl stop filebrowser
+    
+    # Add User
+    /usr/local/bin/filebrowser users add "$FB_USER" "$FB_PASS" --perm.admin --database /root/filebrowser.db
+    
+    # Restart
+    systemctl start filebrowser
+} >> "$LOG_FILE" 2>&1
+print_success "FileBrowser configured and running."
 
-# Add User (Using the variables captured at start)
-/usr/local/bin/filebrowser users add "$FB_USER" "$FB_PASS" --perm.admin --database /root/filebrowser.db
-
-# Restart service
-systemctl start filebrowser
-
-# =========================================================
-#  8. TORRENT CREATOR SCRIPT
-# =========================================================
-echo -e "${BLUE}[8/8] Downloading Torrent Creator Script...${NC}"
-wget -q -O main.py https://raw.githubusercontent.com/xNabil/torrent-creator/refs/heads/main/main.py
+# 8. Torrent Creator
+print_status "Downloading Torrent Creator script..."
+wget -q -O /root/main.py https://raw.githubusercontent.com/xNabil/torrent-creator/refs/heads/main/main.py
+print_success "Script saved to /root/main.py"
 
 # =========================================================
-#  COMPLETION
+#  FINAL SUMMARY
 # =========================================================
-echo -e "\n${GREEN}=========================================${NC}"
-echo -e "${GREEN}   INSTALLATION COMPLETE SUCCESSFULLY    ${NC}"
-echo -e "${GREEN}=========================================${NC}"
-echo -e "FileBrowser is running on port 808."
-echo -e "Username: $FB_USER"
-echo -e "Password: (hidden)"
-echo -e "Torrent Creator script saved as: main.py"
-echo -e "\n"
+
+# Detect IP
+PUBLIC_IP=$(curl -s https://api.ipify.org || hostname -I | awk '{print $1}')
+
+echo ""
+echo -e "${GREEN}=====================================================${NC}"
+echo -e "${GREEN}             INSTALLATION COMPLETE                   ${NC}"
+echo -e "${GREEN}=====================================================${NC}"
+echo ""
+echo -e "   ${YELLOW}Service${NC}        : FileBrowser"
+echo -e "   ${YELLOW}Status${NC}         : ${GREEN}Active (Running)${NC}"
+echo -e "   ${YELLOW}URL${NC}            : http://$PUBLIC_IP:808"
+echo -e "   ${YELLOW}Username${NC}       : $FB_USER"
+echo -e "   ${YELLOW}Password${NC}       : (hidden)"
+echo -e "   ${YELLOW}Database${NC}       : /root/filebrowser.db"
+echo ""
+echo -e "   ${YELLOW}Extra Tools${NC}    : mkbrr, mkvtoolnix, fastfetch, ffmpeg"
+echo -e "   ${YELLOW}Torrent Script${NC} : /root/main.py"
+echo ""
+echo -e "${GREEN}=====================================================${NC}"
+echo -e "Logs saved to: $LOG_FILE"
+echo ""
