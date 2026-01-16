@@ -1,254 +1,201 @@
 #!/bin/bash
-tput sgr0; clear
 
 # =========================================================
-#  SEEDBOX + MEDIA CENTER INSTALLER (INTERACTIVE)
+#  WRAPPER INSTALLER: JERRY048 SEEDBOX + MEDIA TOOLS
 # =========================================================
 
-# Colors for modern output
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
-LOG_FILE="/root/media-install.log"
 
-## Load Seedbox Components (Original Logic)
-# We load this early to get helper functions, but we will handle errors manually
-source <(wget -qO- https://raw.githubusercontent.com/jerry048/Seedbox-Components/main/seedbox_installation.sh)
+LOG_FILE="/root/wrapper_install.log"
+> "$LOG_FILE"
 
-# Check if Seedbox Components loaded
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Component ~Seedbox Components~ failed to load${NC}"
-    echo "Check connection with GitHub"
-    exit 1
+# Helper Functions
+print_status() { echo -e "${BLUE}[INFO]${NC} $1"; }
+print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Check Root
+if [[ $EUID -ne 0 ]]; then
+   print_error "This script must be run as root."
+   exit 1
 fi
 
-## Load loading animation
-source <(wget -qO- https://raw.githubusercontent.com/Silejonu/bash_loading_animations/main/bash_loading_animations.sh)
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Component ~Bash loading animation~ failed to load${NC}"
-    exit 1
-fi
-
-# Fix: Ensure function exists before trapping
-if declare -f BLA::stop_loading_animation > /dev/null; then
-    trap BLA::stop_loading_animation SIGINT
-fi
-
-## Install function wrapper (Preserved from original)
-install_() {
-    info_2 "$2"
-    BLA::start_loading_animation "${BLA_classic[@]}"
-    $1 1> /dev/null 2> $3
-    if [ $? -ne 0 ]; then
-        fail_3 "FAIL" 
-    else
-        info_3 "Successful"
-        export $4=1
-    fi
-    BLA::stop_loading_animation
-}
-
-## Installation environment Check
-info "Checking Installation Environment"
-
-# Check Root Privilege
-if [ "$(id -u)" -ne 0 ]; then
-    fail_exit "This script needs root permission to run"
-fi
-
-# Linux Distro Version check
-if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    OS=$NAME
-    VER=$VERSION_ID
-else
-    OS=$(uname -s)
-    VER=$(uname -r)
-fi
+clear
+echo -e "${CYAN}"
+echo "====================================================="
+echo "   SEEDBOX WRAPPER INSTALLER (OFFICIAL SCRIPT)"
+echo "====================================================="
+echo -e "${NC}"
 
 # =========================================================
 #  1. INTERACTIVE CONFIGURATION
 # =========================================================
-clear
-echo -e "${CYAN}"
-echo "====================================================="
-echo "      SEEDBOX & MEDIA TOOLS INSTALLATION"
-echo "====================================================="
-echo -e "${NC}"
-echo -e "${YELLOW}:: Configuration ::${NC}"
 
 # 1. Username
 while true; do
-    read -p "Enter Username (for all services): " username
-    if [[ -n "$username" ]]; then
-        break
-    else
-        echo -e "${RED}Username cannot be empty.${NC}"
-    fi
+    read -p "Enter Username (for Seedbox & FileBrowser): " username
+    if [[ -n "$username" ]]; then break; else echo -e "${RED}Username cannot be empty.${NC}"; fi
 done
 
-# 2. Password (Min 12 Chars)
+# 2. Password
 while true; do
     read -s -p "Enter Password (min 12 chars): " password
     echo ""
-    if [[ ${#password} -ge 12 ]]; then
-        break
-    else
-        echo -e "${RED}Error: Password is too short. It must be at least 12 characters.${NC}"
-    fi
+    if [[ ${#password} -ge 12 ]]; then break; else echo -e "${RED}Password too short.${NC}"; fi
 done
 
-# 3. Cache Size
+# 3. Cache
 while true; do
-    read -p "Enter Cache Size in MB (e.g., 1024): " cache
-    if [[ "$cache" =~ ^[0-9]+$ ]]; then
-        qb_cache=$cache
-        break
-    else
-        echo -e "${RED}Cache must be a number.${NC}"
-    fi
+    read -p "Enter qBittorrent Cache (in MB, e.g. 1024): " cache
+    if [[ "$cache" =~ ^[0-9]+$ ]]; then break; else echo -e "${RED}Must be a number.${NC}"; fi
 done
 
+# 4. qBittorrent Version
+read -p "Enter qBittorrent Version [Default: 4.6.7]: " qb_ver
+qb_ver=${qb_ver:-4.6.7}
+
+# 5. Libtorrent Version
+lib_ver="v1.2.19" 
+
 echo ""
-echo -e "${YELLOW}:: Software Selection ::${NC}"
+echo -e "${YELLOW}:: Component Selection ::${NC}"
 
-# Defaults
-qb_install=1
-# Defaulting to stable versions to avoid complex flag parsing
-qb_ver="qBittorrent-4.6.3" 
-lib_ver="libtorrent-v1.2.19"
-qb_port=8080
-qb_incoming_port=45000
+# Autobrr
+read -p "Install Autobrr? [Y/n]: " auto_p
+[[ "$auto_p" =~ ^[Nn]$ ]] && flag_b="" || flag_b="-b"
 
-# Prompt for components
-read -p "Install Autobrr? [Y/n]: " prompt_autobrr
-[[ "$prompt_autobrr" =~ ^[Nn]$ ]] && autobrr_install="" || autobrr_install=1
+# Vertex
+read -p "Install Vertex? [y/N]: " vert_p
+[[ "$vert_p" =~ ^[Yy]$ ]] && flag_v="-v" || flag_v=""
 
-read -p "Install Vertex? [y/N]: " prompt_vertex
-[[ "$prompt_vertex" =~ ^[Yy]$ ]] && vertex_install=1 || vertex_install=""
+# Autoremove-torrents
+read -p "Install Autoremove-torrents? [Y/n]: " remove_p
+[[ "$remove_p" =~ ^[Nn]$ ]] && flag_r="" || flag_r="-r"
 
-read -p "Install BBRv3 (TCP Tuning)? [Y/n]: " prompt_bbr
-if [[ ! "$prompt_bbr" =~ ^[Nn]$ ]]; then
-    bbrv3_install=1
-    unset bbrx_install
+# BBR Version
+read -p "Enable BBRv3 (Recommended)? [Y/n]: " bbr_p
+if [[ ! "$bbr_p" =~ ^[Nn]$ ]]; then
+    flag_net="-3"
 else
-    bbrv3_install=""
+    # Ask for BBRx if v3 is declined
+    read -p "Enable BBRx instead? [y/N]: " bbrx_p
+    [[ "$bbrx_p" =~ ^[Yy]$ ]] && flag_net="-x" || flag_net=""
 fi
 
-# FileBrowser is mandatory per request
-filebrowser_install=1
+# =========================================================
+#  CONFIRMATION SUMMARY
+# =========================================================
+echo ""
+echo -e "${YELLOW}:: Installation Summary ::${NC}"
+echo "-----------------------------------------------------"
+echo -e " > Core:      qBittorrent ($qb_ver) + Libtorrent ($lib_ver)"
+echo -e " > Tuning:    Cache: ${cache}MB | Network: ${flag_net:1} (if selected)"
+echo -e " > Services:  FileBrowser"
+echo -e " > Extra Tools: mkbrr, mkvtoolnix, fastfetch, ffmpeg"
+echo -e " > Script:    Torrent Creator (/home/$username/Downloads/main.py)"
+echo "-----------------------------------------------------"
+read -p "Press Enter to start installation..."
 
 echo ""
-print_status "Installation started. Logs: $LOG_FILE"
-echo "-----------------------------------------------------"
-
-# System Update & Dependencies Install
-info "Start System Update & Dependencies Install"
-update
-
-## Install Seedbox Environment
-tput sgr0; clear
-info "Start Installing Seedbox Environment"
-echo -e "\n"
+print_status "Starting Official Installation... This may take time."
 
 # =========================================================
-#  2. SEEDBOX COMPONENT INSTALLATION
+#  2. EXECUTE OFFICIAL SCRIPT
 # =========================================================
 
-# Load qBittorrent Installer Script
-source <(wget -qO- https://raw.githubusercontent.com/jerry048/Seedbox-Components/main/Torrent%20Clients/qBittorrent/qBittorrent_install.sh)
+CMD_FLAGS="-u $username -p $password -c $cache -q $qb_ver -l $lib_ver $flag_b $flag_v $flag_r $flag_net"
 
-# qBittorrent Install
-if [[ -n "$qb_install" ]]; then
-    # Create user if not exists
-    if ! id -u $username > /dev/null 2>&1; then
-        useradd -m -s /bin/bash $username
-    fi
-    chown -R $username:$username /home/$username
-    
-    # Run Install Wrapper
-    install_ "install_qBittorrent_ $username $password $qb_ver $lib_ver $qb_cache $qb_port $qb_incoming_port" "Installing qBittorrent ($qb_ver)" "/tmp/qb_error" qb_install_success
+echo -e "${YELLOW}Running: Install.sh $CMD_FLAGS${NC}"
+
+# Execute directly
+bash <(wget -qO- https://raw.githubusercontent.com/jerry048/Dedicated-Seedbox/main/Install.sh) $CMD_FLAGS
+
+if [ $? -ne 0 ]; then
+    print_error "The official script encountered an error."
+    read -p "Continue with installing Extra Tools anyway? [y/N]: " cont
+    if [[ ! "$cont" =~ ^[Yy]$ ]]; then exit 1; fi
 fi
 
-# autobrr Install
-if [[ -n "$autobrr_install" ]]; then
-    # Default port if not set
-    autobrr_port=7474
-    install_ install_autobrr_ "Installing autobrr" "/tmp/autobrr_error" autobrr_install_success
-fi
-
-# vertex Install
-if [[ -n "$vertex_install" ]]; then
-    vertex_port=3000
-    install_ install_vertex_ "Installing vertex" "/tmp/vertex_error" vertex_install_success
-fi
+print_success "Official Seedbox Script Finished."
+echo ""
 
 # =========================================================
-#  3. NEW MEDIA TOOLS INSTALLATION
+#  3. INSTALL EXTRA MEDIA TOOLS
 # =========================================================
-seperator
-info "Installing Extra Media Tools"
+print_status "Installing Extra Media Tools..."
 
-# Define a wrapper for standard shell commands to fit the 'install_' style
-run_shell_cmd() {
-    bash -c "$1"
-}
+# 3.1 Update & Dependencies
+apt-get update -y >> "$LOG_FILE" 2>&1
+apt-get install -y curl wget gnupg2 sudo lsb-release >> "$LOG_FILE" 2>&1
 
-# 3.1 MKVToolNix
-install_mkvtoolnix() {
-    MKV_URL="https://mkvtoolnix.download/debian/pool/bookworm/main/m/mkvtoolnix/mkvtoolnix_96.0-0~debian12bunkus01_amd64.deb"
-    wget -q -O mkvtoolnix.deb "$MKV_URL" && \
-    apt-get install -y ./mkvtoolnix.deb && \
-    rm mkvtoolnix.deb
-}
-install_ install_mkvtoolnix "Installing MKVToolNix (v96.0)" "/tmp/mkv_error" mkv_success
+# 3.2 MKVToolNix
+print_status "Installing MKVToolNix..."
+{
+    wget -q -O /usr/share/keyrings/gpg-pub-moritzbunkus.gpg https://mkvtoolnix.download/gpg-pub-moritzbunkus.gpg
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/gpg-pub-moritzbunkus.gpg] https://mkvtoolnix.download/debian/ $(lsb_release -sc) main" > /etc/apt/sources.list.d/mkvtoolnix.list
+    apt-get update -y
+    apt-get install -y mkvtoolnix
+} >> "$LOG_FILE" 2>&1
+print_success "MKVToolNix installed."
 
-# 3.2 MediaInfo & FFmpeg
-install_ffmpeg() {
-    apt-get install -y mediainfo libmediainfo-dev ffmpeg
-}
-install_ install_ffmpeg "Installing MediaInfo & FFmpeg" "/tmp/ffmpeg_error" ffmpeg_success
+# 3.3 MediaInfo & FFmpeg
+print_status "Installing MediaInfo & FFmpeg..."
+apt-get install -y mediainfo libmediainfo-dev ffmpeg >> "$LOG_FILE" 2>&1
+print_success "FFmpeg & MediaInfo installed."
 
-# 3.3 mkbrr
-install_mkbrr() {
-    MKBRR_URL=$(curl -s https://api.github.com/repos/autobrr/mkbrr/releases/latest | grep download | grep linux_amd64.deb | cut -d\" -f4)
-    if [[ -n "$MKBRR_URL" ]]; then
-        wget -q -O mkbrr.deb "$MKBRR_URL"
-        apt-get install -y ./mkbrr.deb
-        rm mkbrr.deb
-    else
-        return 1
-    fi
-}
-install_ install_mkbrr "Installing mkbrr" "/tmp/mkbrr_error" mkbrr_success
+# 3.4 mkbrr
+print_status "Installing mkbrr..."
+MKBRR_URL=$(curl -s https://api.github.com/repos/autobrr/mkbrr/releases/latest | grep download | grep linux_amd64.deb | cut -d\" -f4)
+if [[ -n "$MKBRR_URL" ]]; then
+    wget -q -O mkbrr.deb "$MKBRR_URL" >> "$LOG_FILE" 2>&1
+    apt-get install -y ./mkbrr.deb >> "$LOG_FILE" 2>&1
+    rm mkbrr.deb
+    print_success "mkbrr installed."
+else
+    print_error "Could not find mkbrr download URL."
+fi
 
-# 3.4 Fastfetch
-install_fastfetch() {
-    echo "deb [signed-by=/etc/apt/keyrings/fastfetch.gpg] http://repo.fastfetch.dev/debian/ generic main" | tee /etc/apt/sources.list.d/fastfetch.list
-    mkdir -p /etc/apt/keyrings
+# 3.5 Fastfetch
+print_status "Installing Fastfetch..."
+{
     FF_URL="https://github.com/fastfetch-cli/fastfetch/releases/download/2.55.1/fastfetch-linux-amd64-polyfilled.deb"
     wget -q -O fastfetch.deb "$FF_URL"
     apt-get install -y ./fastfetch.deb
     rm fastfetch.deb
-}
-install_ install_fastfetch "Installing Fastfetch" "/tmp/fastfetch_error" fastfetch_success
+} >> "$LOG_FILE" 2>&1
+print_success "Fastfetch installed."
 
-# 3.5 Torrent Creator Script
-install_torrent_creator() {
-    wget -q -O /root/main.py https://raw.githubusercontent.com/xNabil/torrent-creator/refs/heads/main/main.py
-}
-install_ install_torrent_creator "Downloading Torrent Creator" "/tmp/creator_error" creator_success
+# 3.6 Torrent Creator Script
+# TARGET: qBittorrent download path usually /home/$username/Downloads
+DL_PATH="/home/$username/Downloads"
+# Fallback if Downloads doesn't exist yet
+if [ ! -d "$DL_PATH" ]; then
+    mkdir -p "$DL_PATH"
+    chown "$username":"$username" "$DL_PATH"
+fi
 
-# 3.6 FileBrowser
-install_filebrowser() {
-    # Install binary
-    curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash
-    
-    # Create Service
-    cat <<EOF > /etc/systemd/system/filebrowser.service
+print_status "Downloading Torrent Creator to $DL_PATH..."
+wget -q -O "$DL_PATH/main.py" https://raw.githubusercontent.com/xNabil/torrent-creator/refs/heads/main/main.py
+chown "$username":"$username" "$DL_PATH/main.py"
+chmod +x "$DL_PATH/main.py"
+print_success "Script saved to $DL_PATH/main.py"
+
+# =========================================================
+#  4. INSTALL FILEBROWSER
+# =========================================================
+print_status "Installing & Configuring FileBrowser..."
+
+# Install
+curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash >> "$LOG_FILE" 2>&1
+
+# Service File
+cat <<EOF > /etc/systemd/system/filebrowser.service
 [Unit]
 Description=File Browser
 After=network.target
@@ -268,84 +215,25 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-    # Init DB and User
-    systemctl daemon-reload
-    # Create DB file by starting momentarily or manually
-    if [ ! -f /root/filebrowser.db ]; then
-       # Temporary run to generate DB
-       timeout 5s /usr/local/bin/filebrowser --database /root/filebrowser.db --root / --port 808 >/dev/null 2>&1
-    fi
-    
-    # Add User (using the global username/password)
-    /usr/local/bin/filebrowser users add "$username" "$password" --perm.admin --database /root/filebrowser.db 2>/dev/null || \
-    /usr/local/bin/filebrowser users update "$username" --password "$password" --perm.admin --database /root/filebrowser.db
-    
-    # Enable and Start
-    systemctl enable filebrowser
-    systemctl restart filebrowser
-}
-install_ install_filebrowser "Installing FileBrowser" "/tmp/fb_error" fb_success
-
-# =========================================================
-#  4. SYSTEM TUNING (Preserved)
-# =========================================================
-seperator
-info "Start Doing System Tuning"
-
-install_ tuned_ "Installing tuned" "/tmp/tuned_error" tuned_success
-install_ set_txqueuelen_ "Setting txqueuelen" "/tmp/txqueuelen_error" txqueuelen_success
-install_ set_file_open_limit_ "Setting File Open Limit" "/tmp/file_open_limit_error" file_open_limit_success
-
-# Check for Virtual Environment
-systemd-detect-virt > /dev/null
-if [ $? -eq 0 ]; then
-    warn "Virtualization detected, skipping Disk Scheduler tuning"
-    install_ disable_tso_ "Disabling TSO" "/tmp/tso_error" tso_success
-else
-    install_ set_disk_scheduler_ "Setting Disk Scheduler" "/tmp/disk_scheduler_error" disk_scheduler_success
-    install_ set_ring_buffer_ "Setting Ring Buffer" "/tmp/ring_buffer_error" ring_buffer_success
+# Initialize DB
+systemctl daemon-reload
+# Temporarily start to create DB file if missing
+if [ ! -f /root/filebrowser.db ]; then
+   timeout 5s /usr/local/bin/filebrowser --database /root/filebrowser.db --root / --port 808 >/dev/null 2>&1
 fi
 
-install_ set_initial_congestion_window_ "Setting Initial Congestion Window" "/tmp/initial_congestion_window_error" initial_congestion_window_success
-install_ kernel_settings_ "Setting Kernel Settings" "/tmp/kernel_settings_error" kernel_settings_success
+# Add User (Using same credentials as Seedbox)
+/usr/local/bin/filebrowser users add "$username" "$password" --perm.admin --database /root/filebrowser.db >> "$LOG_FILE" 2>&1 || \
+/usr/local/bin/filebrowser users update "$username" --password "$password" --perm.admin --database /root/filebrowser.db >> "$LOG_FILE" 2>&1
 
-# BBRv3
-if [[ -n "$bbrv3_install" ]]; then
-    install_ install_bbrv3_ "Installing BBRv3" "/tmp/bbrv3_error" bbrv3_install_success
-fi
-
-## Configure Boot Script
-touch /root/.boot-script.sh && chmod +x /root/.boot-script.sh
-cat << EOF > /root/.boot-script.sh
-#!/bin/bash
-sleep 120s
-# Re-apply network settings on boot
-/sbin/sysctl -p
-/sbin/ethtool -G \$(ip route get 1 | awk '{print \$5; exit}') rx 4096 tx 4096 2>/dev/null
-/sbin/ifconfig \$(ip route get 1 | awk '{print \$5; exit}') txqueuelen 10000
-EOF
-
-# Service for boot script
-cat << EOF > /etc/systemd/system/boot-script.service
-[Unit]
-Description=boot-script
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=/root/.boot-script.sh
-RemainAfterExit=true
-
-[Install]
-WantedBy=multi-user.target
-EOF
-systemctl enable boot-script.service > /dev/null 2>&1
+# Enable & Start
+systemctl enable filebrowser >> "$LOG_FILE" 2>&1
+systemctl restart filebrowser
+print_success "FileBrowser running on Port 808."
 
 # =========================================================
-#  5. FINAL SUMMARY
+#  FINAL SUMMARY
 # =========================================================
-
-# Detect IP
 PUBLIC_IP=$(curl -s https://api.ipify.org || hostname -I | awk '{print $1}')
 
 echo ""
@@ -353,55 +241,21 @@ echo -e "${GREEN}=====================================================${NC}"
 echo -e "${GREEN}             INSTALLATION COMPLETE                   ${NC}"
 echo -e "${GREEN}=====================================================${NC}"
 echo ""
-
-# Global Credentials
-echo -e "   ${YELLOW}Credentials (Global)${NC}"
-echo -e "   Username       : $username"
-echo -e "   Password       : $password"
+echo -e "   ${YELLOW}User${NC}          : $username"
+echo -e "   ${YELLOW}Password${NC}      : $password"
 echo ""
-
-# FileBrowser
-if [[ -n "$fb_success" ]]; then
-echo -e "   ${YELLOW}FileBrowser${NC}"
-echo -e "   URL            : http://$PUBLIC_IP:808"
-echo -e "   Status         : ${GREEN}Active${NC}"
-echo ""
+echo -e "   ${YELLOW}FileBrowser${NC}   : http://$PUBLIC_IP:808"
+echo -e "   ${YELLOW}qBittorrent${NC}   : http://$PUBLIC_IP:8080"
+if [[ -n "$flag_b" ]]; then
+echo -e "   ${YELLOW}Autobrr${NC}       : http://$PUBLIC_IP:7474"
 fi
-
-# qBittorrent
-if [[ -n "$qb_install_success" ]]; then
-echo -e "   ${YELLOW}qBittorrent${NC}"
-echo -e "   WebUI          : http://$PUBLIC_IP:$qb_port"
-echo -e "   Cache          : $qb_cache MiB"
-echo ""
+if [[ -n "$flag_v" ]]; then
+echo -e "   ${YELLOW}Vertex${NC}        : http://$PUBLIC_IP:3000"
 fi
-
-# Autobrr
-if [[ -n "$autobrr_install_success" ]]; then
-echo -e "   ${YELLOW}Autobrr${NC}"
-echo -e "   WebUI          : http://$PUBLIC_IP:$autobrr_port" # Port is dynamic in original, usually 7474
 echo ""
-fi
-
-# Vertex
-if [[ -n "$vertex_install_success" ]]; then
-echo -e "   ${YELLOW}Vertex${NC}"
-echo -e "   WebUI          : http://$PUBLIC_IP:$vertex_port"
+echo -e "   ${YELLOW}Extra Tools${NC}   : FFmpeg, MediaInfo, MKVToolNix, mkbrr, Fastfetch"
+echo -e "   ${YELLOW}Torrent Creation Script Path${NC}   : $DL_PATH/main.py"
 echo ""
-fi
-
-# BBR
-if [[ -n "$bbrv3_install_success" ]]; then
-echo -e "   ${YELLOW}Network Tuning${NC}"
-echo -e "   BBRv3          : ${GREEN}Installed (Reboot required)${NC}"
-echo ""
-fi
-
-echo -e "   ${YELLOW}Extra Tools${NC}    : mkbrr, mkvtoolnix, fastfetch, ffmpeg"
-echo -e "   ${YELLOW}Torrent Script${NC} : /root/main.py"
-echo ""
+echo -e "   ${CYAN}Note: If BBRv3 was installed, please reboot your server.${NC}"
 echo -e "${GREEN}=====================================================${NC}"
-echo -e "Logs saved to: $LOG_FILE"
-echo ""
-
 exit 0
